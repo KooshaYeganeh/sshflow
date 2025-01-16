@@ -1,0 +1,24 @@
+
+[opensuse]
+ifconfig -a
+cat /etc/os-release
+cat /etc/resolv.conf
+sudo zypper ref
+sudo zypper up
+sudo freshclam
+sudo clamscan --recursive --infected --remove /home/koosha
+sudo iptables -nvL
+sudo /usr/local/sbin/maldet -u
+sudo rkhunter --update
+
+
+
+[debian]
+netstat -na
+sudo apt update 
+
+
+[rocky]
+ps -aux
+sudo dnf update -y
+
