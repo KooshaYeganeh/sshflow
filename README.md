@@ -195,5 +195,5 @@ Once the installer is created, distribute the packaged installer.
 ---
 
 For more details and updates, visit the official repository on GitHub:  
-[sshflow GitHub Repository](https://github.com/KooshaYeganeh/sshflow)
+[website](https://kooshayeganeh.github.io)
 
