@@ -18,13 +18,22 @@ def parse_commands(commands_file):
         'rocky': []
     }
     current_os = None
+
     with open(commands_file, 'r') as file:
         for line in file:
             line = line.strip()
-            if line.startswith('['):  # New OS section
-                current_os = line[1:-1].lower()  # Remove the brackets and convert to lowercase
-            elif line and current_os:  # Non-empty command under a section
+            if not line or line.startswith('#'):  # Skip empty lines and comments
+                continue
+            if line.startswith('[') and line.endswith(']'):  # New OS section
+                current_os = line[1:-1].lower()  # Remove brackets and convert to lowercase
+                if current_os not in commands:  # Validate OS type
+                    print(Fore.YELLOW + f"Warning: Unknown OS type '{current_os}'. Skipping...")
+                    current_os = None
+            elif current_os:  # Non-empty command under a valid section
                 commands[current_os].append(line)
+            else:  # Command outside any section
+                print(Fore.YELLOW + f"Warning: Command '{line}' is not under any OS section. Skipping...")
+
     return commands
 
 def get_os_type(ssh_client):
@@ -37,7 +46,7 @@ def get_os_type(ssh_client):
             return "debian"
         elif "opensuse" in os_info:
             return "opensuse"
-        elif "rocky" in os_info or "centos" in os_info or "redhat" or "fedora" in os_info:
+        elif "rocky" in os_info or "centos" in os_info or "redhat" in os_info or "fedora" in os_info:
             return "rocky"
         else:
             return None  # Unknown OS
@@ -51,44 +60,43 @@ def execute_commands_on_host(host, username, key_path, commands, sudo_passwords,
         # Setup SSH client
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # Automatically accept unknown hosts
-        
+
         # Connect to the host using the private key
         print(Fore.GREEN + f"Connecting to {host} as {username}...")
         ssh.connect(host, username=username, key_filename=key_path)
-        
+
         # Get the sudo password for this host from the dictionary
         sudo_password = sudo_passwords.get(host)
-        
+
         if not sudo_password:
             print(Fore.RED + f"No sudo password defined for {host}. Skipping...")
             return
-        
+
         # Get OS-specific commands
         os_commands = commands.get(os_type, [])
-        
+
         # Execute each command
         for command in os_commands:
             if 'sudo' in command:
                 # Use echo to pass password to sudo
                 command = f"echo {sudo_password} | sudo -S {command}"
-            
+
             print(Fore.YELLOW + f"Executing: {command} on {host}")
             stdin, stdout, stderr = ssh.exec_command(command)
             output = stdout.read().decode()
             error = stderr.read().decode()
-            
+
             if output:
                 print(Fore.CYAN + f"Output from {host}: {output}")
-            
+
             # Filter out the specific error message
             if error and "[sudo] password for root:" not in error:
                 print(Fore.RED + f"Error from {host}: {error}")
-        
+
         # Close the SSH connection
         ssh.close()
     except Exception as e:
         print(Fore.RED + f"Failed to connect or execute commands on {host}: {str(e)}")
-
 
 def main(commands_file, hosts_file, key_path, sudo_passwords):
     """Main function to process commands on multiple hosts."""
@@ -97,21 +105,21 @@ def main(commands_file, hosts_file, key_path, sudo_passwords):
 
     # Read hosts and usernames from file
     hosts = read_file(hosts_file)
-    
+
     # Execute commands on each host with the corresponding username
     for entry in hosts:
         # Skip empty lines
         if not entry.strip():
             continue
-        
+
         # Split each entry into host and username
         parts = entry.split()
         if len(parts) != 2:
             print(Fore.YELLOW + f"Skipping invalid line: {entry}")
             continue
-        
+
         host, username = parts
-        
+
         # Get OS type of the remote machine
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -122,14 +130,13 @@ def main(commands_file, hosts_file, key_path, sudo_passwords):
         except Exception as e:
             os_type = None
             print(Fore.RED + f"Error detecting OS on {host}: {e}")
-        
+
         # Execute the commands on the host if the OS type is recognized
         if os_type:
             print(Fore.GREEN + f"Detected {os_type} on {host}. Running commands...")
             execute_commands_on_host(host, username, key_path, commands, sudo_passwords, os_type)
         else:
             print(Fore.RED + f"Could not determine OS type for {host}. Skipping...")
-
 
 if __name__ == "__main__":
     # Specify the paths to your files and SSH credentials

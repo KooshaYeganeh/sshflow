@@ -1,16 +1,86 @@
 
 [opensuse]
-ifconfig -a
-cat /etc/os-release
-cat /etc/resolv.conf
-sudo zypper ref
-sudo zypper up
-sudo freshclam
-sudo clamscan --recursive --infected --remove /home/koosha
-sudo iptables -nvL
-sudo /usr/local/sbin/maldet -u
-sudo rkhunter --update
 
+
+echo "Starting to configure the web server..."
+
+# Update the system
+sudo zypper refresh
+sudo zypper update -y
+
+# Install basic tools
+sudo zypper -n install git wget curl sshfs
+
+# Install and configure Nginx
+sudo zypper -n install nginx
+
+# Create Nginx configuration for the Flask app
+sudo tee /etc/nginx/conf.d/flaskapp.conf > /dev/null <<EOL
+server {
+    listen 80;
+    server_name localhost;
+
+    location / {
+        proxy_pass http://127.0.0.1:5005;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+}
+EOL
+
+# Restart and enable Nginx
+sudo systemctl restart nginx
+sudo systemctl enable nginx
+
+# Install antivirus and security tools
+sudo zypper -n install clamav rkhunter chkrootkit lynis
+
+# Install Maldetect
+wget http://www.rfxn.com/downloads/maldetect-current.tar.gz
+tar -xvf maldetect-current.tar.gz
+cd maldetect-1.6.*
+sudo ./install.sh
+
+# Install Python 3.11 and development tools
+sudo zypper -n install python311 python311-devel python3-devel
+
+
+
+
+# Configure firewall
+sudo systemctl start firewalld
+sudo systemctl enable firewalld
+sudo firewall-cmd --set-default-zone=public
+sudo firewall-cmd --zone=public --add-service=http --permanent
+sudo firewall-cmd --zone=public --add-service=https --permanent
+sudo firewall-cmd --zone=public --add-service=ssh --permanent
+sudo firewall-cmd --zone=public --add-port=5005/tcp --permanent
+sudo firewall-cmd --reload
+
+# Install and configure Fail2ban
+sudo zypper -n install fail2ban
+sudo systemctl start fail2ban
+sudo systemctl enable fail2ban
+
+# Install and configure Netdata for monitoring
+sudo zypper -n install netdata
+
+# Configure Netdata using triple quotes
+echo """
+[global]
+    run as user = netdata
+    web files owner = root
+    web files group = root
+    # Netdata is not designed to be exposed to potentially hostile networks
+    bind socket to IP = 127.0.0.1
+""" | sudo tee /etc/netdata/netdata.conf > /dev/null
+
+# Start and enable Netdata
+sudo systemctl start netdata
+sudo systemctl enable netdata
+
+echo "Web server configuration completed successfully!"
 
 
 [debian]
